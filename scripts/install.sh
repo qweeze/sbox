@@ -63,15 +63,26 @@ if [ "$VERSION" = "latest" ]; then
 	[ -n "$VERSION" ] || fail "could not determine latest release version"
 fi
 
-archive="sbox_${VERSION}_${os}_${arch}.tar.gz"
-base_url="https://github.com/${REPO}/releases/download/${VERSION}"
+case "$VERSION" in
+v*)
+	tag="$VERSION"
+	archive_version=${VERSION#v}
+	;;
+*)
+	tag="v$VERSION"
+	archive_version="$VERSION"
+	;;
+esac
+
+archive="sbox_${archive_version}_${os}_${arch}.tar.gz"
+base_url="https://github.com/${REPO}/releases/download/${tag}"
 archive_url="${base_url}/${archive}"
 checksums_url="${base_url}/checksums.txt"
 
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
-echo "Installing sbox ${VERSION} for ${os}/${arch}..."
+echo "Installing sbox ${tag} for ${os}/${arch}..."
 
 curl -fsSL "$archive_url" -o "${tmpdir}/${archive}"
 curl -fsSL "$checksums_url" -o "${tmpdir}/checksums.txt"
@@ -85,8 +96,7 @@ actual_checksum=$(shasum -a 256 "${tmpdir}/${archive}" | awk '{print $1}')
 tar -xzf "${tmpdir}/${archive}" -C "$tmpdir"
 [ -f "${tmpdir}/sbox" ] || fail "archive did not contain sbox binary"
 
-if [ -w "$INSTALL_DIR" ]; then
-	mkdir -p "$INSTALL_DIR"
+if mkdir -p "$INSTALL_DIR" 2>/dev/null && [ -w "$INSTALL_DIR" ]; then
 	install -m 0755 "${tmpdir}/sbox" "${INSTALL_DIR}/sbox"
 else
 	need_cmd sudo
@@ -95,4 +105,3 @@ else
 fi
 
 echo "Installed to ${INSTALL_DIR}/sbox"
-

@@ -110,18 +110,18 @@ sbox -v codex
 
 ## Installation
 
-Requires macOS and Go 1.24+.
+Binary releases require macOS only.
 
 Install the latest GitHub release binary:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/qweeze/sbox/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/qweeze/sbox/master/scripts/install.sh | sh
 ```
 
 Install to a custom directory:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/qweeze/sbox/main/scripts/install.sh | INSTALL_DIR="$HOME/.local/bin" sh
+curl -fsSL https://raw.githubusercontent.com/qweeze/sbox/master/scripts/install.sh | INSTALL_DIR="$HOME/.local/bin" sh
 ```
 
 If you already have Go, install the latest version with:
@@ -129,6 +129,8 @@ If you already have Go, install the latest version with:
 ```bash
 go install github.com/qweeze/sbox/cmd/sbox@latest
 ```
+
+Building from source or using `go install` requires Go 1.24+.
 
 Or build from a checkout:
 
