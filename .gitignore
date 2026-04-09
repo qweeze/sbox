@@ -1,0 +1,20 @@
+# Build outputs
+/bin/
+/dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binaries and coverage
+*.test
+*.out
+cover.out
+coverage.out
+
+# Local sandbox and agent config
+.aiignore
+.claude/
+
+# macOS metadata
+.DS_Store
