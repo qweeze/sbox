@@ -1,45 +1,43 @@
 # sbox
 
-OS-level sandbox for AI coding agents. Protects sensitive files from being read or modified by wrapping any command with kernel-enforced deny rules.
+A macOS sandbox tool for AI coding agents and untrusted code execution. Implemented as `sandbox-exec` wrapper. Protects sensitive files from being read or modified by wrapping any command with kernel-enforced deny rules.
 
-Unlike tool-specific ignore files, `sbox` enforces restrictions at the OS level. If a file is denied, the wrapped command and its child processes cannot read it, list it, or modify it.
+> [!WARNING]
+> Disclaimer: this project is mostly vibe-coded
 
-Disclaimer: this project is vibe-coded. Treat it as experimental security tooling, review the generated profile when needed, and verify behavior in your own environment before relying on it.
-
-## Quick Start
-
-The simplest example:
+## Usage
 
 ```bash
 echo "API_KEY=secret" > .env
-echo ".env" > .aiignore
 
-sbox cat .env
+# Pass file patterns with `-d/--deny` arg
+sbox -d ".env*" cat .env
 cat: .env: Operation not permitted
-```
 
-The same rule still applies inside a sandboxed shell:
+# or load ignore file(s)
+# Popular AI-tools' ignore files (.aiignore, .cursorignore, etc) are auto-loaded
+sbox -f .gitignore claude
 
-```bash
+# Prevent writes outside the project directory
+sbox --deny-write codex
+
+# Block non-loopback network access
+sbox --deny-net python untrusted.py
+
+# Jump to a sandboxed shell
 sbox $SHELL
-cat .env
-cat: .env: Operation not permitted
-exit
-```
 
-A more realistic setup for agent sessions:
-
-```bash
-cat > .cursorignore <<'EOF'
-.env
-.env.*
-*.pem
-secrets/
-EOF
-
-sbox codex
-sbox claude
-sbox opencode
+# Show compiled SBPL profile
+sbox --root / -d '.env' -d '*.pem' -d '~/.ssh/' --deny-net --dry-run
+(version 1)
+(allow default)
+(deny file* (regex "^/(|.*/)\\.env(|/.*)$"))
+(deny file* (regex "^/(|.*/)([^/]*)\\.pem(|/.*)$"))
+(deny file* (subpath "/Users/test/.ssh"))
+(deny network*)
+(allow network-bind (local ip "localhost:*"))
+(allow network-inbound (local ip "localhost:*"))
+(allow network-outbound (remote ip "localhost:*"))
 ```
 
 ## Why use it?
@@ -52,48 +50,6 @@ Ignore files usually prevent indexing or context loading. They do not stop an ag
 - Apply the same restrictions to any wrapped command
 - Keep those restrictions in child processes
 - Add optional `--deny-write` and `--deny-net` protections
-
-## Usage
-
-```bash
-sbox [options] <command> [args...]
-```
-
-### Examples
-
-```bash
-# Use auto-discovered ignore files from the project root
-sbox codex
-
-# Sandbox any command, not just agents
-sbox bash
-sbox python agent.py
-sbox cat .env
-
-# Add patterns directly from the CLI
-sbox -d '.env' -d '*.pem' -d 'secrets/' claude
-
-# Use an extra ignore file alongside auto-discovered ones
-sbox -f ~/.config/sbox/ignore claude
-
-# Deny an absolute path directly from the CLI
-sbox -d ~/.ssh codex
-
-# Prevent writes outside the project directory
-sbox --deny-write claude
-
-# Block non-loopback network access
-sbox --deny-net codex
-
-# Combine protections
-sbox --deny-write -d '.env' -d '*.key' bash
-
-# Inspect the generated profile
-sbox --dry-run codex
-
-# See which ignore files were loaded
-sbox -v codex
-```
 
 ### Options
 
@@ -118,33 +74,6 @@ curl -fL "https://github.com/qweeze/sbox/releases/latest/download/${ARCHIVE}" -o
 sudo tar -xzf "/tmp/${ARCHIVE}" -C /usr/local/bin sbox
 ```
 
-## Ignore File Format
-
-Auto-discovered ignore files and files passed with `-f` use `.gitignore`-style syntax:
-
-```gitignore
-# Secrets
-.env
-.env.*
-*.pem
-*.key
-
-# Directories
-secrets/
-.aws/
-
-# Negation — re-allow after a previous deny
-!.env.example
-
-# Anchored to project root
-/config/production.yml
-
-# Double-star (match at any depth)
-**/credentials.json
-```
-
-Malformed patterns are rejected with an explicit error instead of being silently ignored. Use escaped brackets `\[` and `\]` for literal bracket characters.
-
 ### CLI absolute paths
 
 Values passed via `-d` that begin with `/` or `~/` are treated as absolute filesystem paths and are independent of `--root`.
@@ -155,18 +84,22 @@ Values passed via `-d` that begin with `/` or `~/` are treated as absolute files
 
 ## Auto-discovered Ignore Files
 
-When `--no-auto-ignore` is not set, `sbox` checks the project root for these files and loads every one that exists, in this order:
+When `--no-auto-ignore` is not set, `sbox` checks the project root for these files and loads every one that exists:
 
-1. `.aiderignore`
-2. `.aiexclude`
-3. `.aiignore`
-4. `.augmentignore`
-5. `.clineignore`
-6. `.codeiumignore`
-7. `.continueignore`
-8. `.cursorignore`
-9. `.geminiignore`
-10. `.rooignore`
+- `.aiderignore`
+- `.aiexclude`
+- `.aiignore`
+- `.augmentignore`
+- `.clineignore`
+- `.codeiumignore`
+- `.continueignore`
+- `.cursorignore`
+- `.geminiignore`
+- `.rooignore`
+
+Ignore files use `.gitignore`-style syntax.
+
+Malformed patterns are rejected with an explicit error instead of being silently ignored. Use escaped brackets `\[` and `\]` for literal bracket characters.
 
 ## Pattern Loading Order
 
@@ -177,32 +110,6 @@ Patterns are loaded from multiple sources. Last match wins.
 3. `-d` CLI patterns
 
 This means CLI rules override rules loaded from files.
-
-## How It Works
-
-```text
-ignore files -> parsed patterns -> SBPL profile -> sandbox-exec <command>
-```
-
-The generated profile uses an allow-by-default strategy plus specific deny rules, which keeps normal tooling working while blocking the paths you marked as sensitive.
-
-## Development
-
-### Build
-
-```bash
-go build -o ./bin/sbox ./cmd/sbox
-```
-
-### Test
-
-```bash
-go test ./...
-go test ./... -v
-go test ./cmd/sbox
-go test ./internal/profile/...
-go test -v -run TestSandbox
-```
 
 ## Limitations
 
