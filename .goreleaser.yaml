@@ -24,7 +24,7 @@ archives:
       - sbox
     formats:
       - tar.gz
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ title .Os }}_{{ .Arch }}"
+    name_template: '{{ .ProjectName }}_{{ title .Os }}_{{ indexOrDefault (map "amd64" "x86_64" "arm64" "arm64") .Arch .Arch }}'
     files:
       - README.md
       - LICENSE
@@ -34,4 +34,3 @@ checksum:
 
 changelog:
   use: git
-
