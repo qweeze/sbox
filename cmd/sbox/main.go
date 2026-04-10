@@ -94,6 +94,8 @@ func main() {
 
 	// Build argv: sandbox-exec -p <profile> <command> [args...]
 	command := flag.Args()
+	// Resolve the target before replacing this process so PATH lookup fails
+	// with a clear sbox error and sandbox-exec receives an executable path.
 	cmdPath, err := findCommand(command[0])
 	if err != nil {
 		fatal("%v", err)
@@ -141,30 +143,38 @@ func buildProfile(root string, autoIgnore bool, extraFiles []string, denyPattern
 
 func collectPatternInputs(projectRoot string, autoIgnore bool, extraFiles []string, denyPatterns []string) (patternInputs, error) {
 	var inputs patternInputs
+	seenFiles := make(map[string]struct{})
+
+	appendPatternFile := func(path string) error {
+		key := patternFileKey(path)
+		if _, ok := seenFiles[key]; ok {
+			return nil
+		}
+		seenFiles[key] = struct{}{}
+
+		lines, found, err := readPatterns(path)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
+		if found {
+			inputs.LoadedFiles = append(inputs.LoadedFiles, path)
+		}
+		inputs.Patterns = append(inputs.Patterns, lines...)
+		return nil
+	}
 
 	if autoIgnore {
 		for _, name := range autoIgnoreFiles {
-			path := filepath.Join(projectRoot, name)
-			lines, found, err := readPatterns(path)
-			if err != nil {
-				return patternInputs{}, fmt.Errorf("read %s: %w", path, err)
+			if err := appendPatternFile(filepath.Join(projectRoot, name)); err != nil {
+				return patternInputs{}, err
 			}
-			if found {
-				inputs.LoadedFiles = append(inputs.LoadedFiles, path)
-			}
-			inputs.Patterns = append(inputs.Patterns, lines...)
 		}
 	}
 
 	for _, f := range extraFiles {
-		lines, found, err := readPatterns(f)
-		if err != nil {
-			return patternInputs{}, fmt.Errorf("read %s: %w", f, err)
+		if err := appendPatternFile(f); err != nil {
+			return patternInputs{}, err
 		}
-		if found {
-			inputs.LoadedFiles = append(inputs.LoadedFiles, f)
-		}
-		inputs.Patterns = append(inputs.Patterns, lines...)
 	}
 
 	for _, d := range denyPatterns {
@@ -221,7 +231,8 @@ func collectPatternInputs(projectRoot string, autoIgnore bool, extraFiles []stri
 }
 
 // readPatterns reads non-empty lines from a file.
-// Returns found=false if the file doesn't exist.
+// Returns found=false if the file doesn't exist so callers can distinguish a
+// missing file from an existing-but-empty file when reporting what was loaded.
 func readPatterns(path string) ([]profile.Pattern, bool, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -246,6 +257,17 @@ func readPatterns(path string) ([]profile.Pattern, bool, error) {
 		}
 	}
 	return patterns, true, scanner.Err()
+}
+
+func patternFileKey(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return filepath.Clean(path)
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		return resolved
+	}
+	return filepath.Clean(abs)
 }
 
 func writeLoadedFiles(w io.Writer, loadedFiles []string) {

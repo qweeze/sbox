@@ -393,6 +393,33 @@ func TestCollectPatternInputsCanDisableAutoIgnore(t *testing.T) {
 	}
 }
 
+func TestCollectPatternInputsDeduplicatesPatternFiles(t *testing.T) {
+	root := t.TempDir()
+
+	autoIgnore := filepath.Join(root, ".aiignore")
+	if err := os.WriteFile(autoIgnore, []byte("auto-deny\n"), 0644); err != nil {
+		t.Fatalf("write .aiignore: %v", err)
+	}
+
+	inputs, err := collectPatternInputs(root, true, []string{autoIgnore, filepath.Join(root, ".", ".aiignore")}, nil)
+	if err != nil {
+		t.Fatalf("collectPatternInputs: %v", err)
+	}
+
+	if len(inputs.Patterns) != 1 {
+		t.Fatalf("expected duplicate pattern files to load once, got %d patterns", len(inputs.Patterns))
+	}
+	if len(inputs.LoadedFiles) != 1 {
+		t.Fatalf("expected duplicate pattern files to load once, got %d loaded files", len(inputs.LoadedFiles))
+	}
+	if inputs.Patterns[0].Value != "auto-deny" {
+		t.Fatalf("pattern value = %q, want %q", inputs.Patterns[0].Value, "auto-deny")
+	}
+	if inputs.LoadedFiles[0] != autoIgnore {
+		t.Fatalf("loadedFiles[0] = %q, want %q", inputs.LoadedFiles[0], autoIgnore)
+	}
+}
+
 func TestWriteLoadedFilesIncludesEachPath(t *testing.T) {
 	var buf bytes.Buffer
 

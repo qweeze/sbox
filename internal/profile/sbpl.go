@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// Pattern is a single ignore rule plus optional source metadata for errors.
+// Pattern is a single ignore rule plus optional source metadata for diagnostics.
 type Pattern struct {
 	Value  string
 	Source string
@@ -55,11 +55,11 @@ func Generate(patterns []Pattern, absPaths []AbsPath, opts Options) (string, err
 	b.WriteString("(allow default)\n")
 
 	for _, pattern := range patterns {
-		compiled, ok, err := compilePattern(pattern.Value)
+		compiled, emitRule, err := compilePattern(pattern.Value)
 		if err != nil {
 			return "", formatPatternError(pattern, err)
 		}
-		if !ok {
+		if !emitRule {
 			continue
 		}
 
@@ -101,11 +101,7 @@ func Generate(patterns []Pattern, absPaths []AbsPath, opts Options) (string, err
 	}
 
 	if opts.DenyNet {
-		b.WriteString("\n;; deny non-loopback network access (localhost allowed)\n")
-		b.WriteString("(deny network*)\n")
-		b.WriteString("(allow network-bind (local ip \"localhost:*\"))\n")
-		b.WriteString("(allow network-inbound (local ip \"localhost:*\"))\n")
-		b.WriteString("(allow network-outbound (remote ip \"localhost:*\"))\n")
+		writeDenyNet(&b)
 	}
 
 	return b.String(), nil
@@ -144,6 +140,7 @@ func scopeToRoot(regex string, root string, anchored bool) string {
 }
 
 // compilePattern converts a gitignore pattern line to a POSIX extended regex.
+// It returns emitRule=false for blank lines, comments, and other no-op rules.
 // Adapted from github.com/sabhiram/go-gitignore (MIT license).
 func compilePattern(line string) (compiledPattern, bool, error) {
 	// Convert "./" prefix to "/" (anchored to project root).
@@ -223,6 +220,14 @@ func writeDenyWrite(b *strings.Builder, root string) {
 	}
 	b.WriteString("  )\n")
 	b.WriteString(")\n")
+}
+
+func writeDenyNet(b *strings.Builder) {
+	b.WriteString("\n;; deny non-loopback network access (localhost allowed)\n")
+	b.WriteString("(deny network*)\n")
+	b.WriteString("(allow network-bind (local ip \"localhost:*\"))\n")
+	b.WriteString("(allow network-inbound (local ip \"localhost:*\"))\n")
+	b.WriteString("(allow network-outbound (remote ip \"localhost:*\"))\n")
 }
 
 func protectEscapedLiterals(line string) (string, []string) {

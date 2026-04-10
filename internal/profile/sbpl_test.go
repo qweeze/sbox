@@ -421,6 +421,37 @@ func TestCompilePatternRootSlashDoubleStarMatchesAtAnyDepth(t *testing.T) {
 	}
 }
 
+func TestCompilePatternAnchoredMiddleSlashDoubleStarMatchesAtAnyDepth(t *testing.T) {
+	pattern, ok, err := compilePattern("/path/to/**/file")
+	if err != nil {
+		t.Fatalf("compilePattern returned error: %v", err)
+	}
+	if !ok {
+		t.Fatal("compilePattern returned !ok")
+	}
+	if !pattern.Anchored {
+		t.Fatal("expected /path/to/**/file to be anchored")
+	}
+
+	root := "/Users/test/project"
+	regex := scopeToRoot(pattern.Regex, root, pattern.Anchored)
+	compiled := regexp.MustCompile(regex)
+
+	tests := map[string]bool{
+		"/Users/test/project/path/to/file":        true,
+		"/Users/test/project/path/to/nested/file": true,
+		"/Users/test/project/path/to/a/b/file":    true,
+		"/Users/test/project/other/path/to/file":  false,
+		"/Users/test/project/path/to/file.txt":    false,
+		"/Users/test/other/path/to/nested/file":   false,
+	}
+	for path, want := range tests {
+		if got := compiled.MatchString(path); got != want {
+			t.Errorf("path %q: match=%v, want=%v (regex=%q)", path, got, want, regex)
+		}
+	}
+}
+
 func TestCompilePatternSlashDoubleStarIsRootRelative(t *testing.T) {
 	pattern, ok, err := compilePattern("logs/**")
 	if err != nil {
