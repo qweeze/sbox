@@ -86,7 +86,7 @@ Values passed via `-d` that begin with `/` or `~/` are treated as absolute files
 - With globs, they are compiled against the filesystem root, so a value like `/Users/me/secrets/*` matches the real filesystem location regardless of the project root.
 - `~/` is expanded to the user's home directory.
 
-## Auto-discovered Ignore Files
+### Auto-discovered Ignore Files
 
 When `--no-auto-ignore` is not set, `sbox` checks the project root for these files and loads every one that exists:
 
@@ -101,7 +101,7 @@ When `--no-auto-ignore` is not set, `sbox` checks the project root for these fil
 - `.geminiignore`
 - `.rooignore`
 
-## Pattern Loading Order
+### Pattern Loading Order
 
 Patterns are loaded from multiple sources. Last match wins.
 
