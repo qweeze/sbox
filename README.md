@@ -1,24 +1,24 @@
 # sbox
 
-A macOS sandbox tool for AI coding agents and untrusted code execution. Implemented as `sandbox-exec` wrapper. Protects sensitive files from being read or modified by wrapping any command with kernel-enforced deny rules.
+A macOS sandbox tool for AI coding agents and untrusted code execution. Implemented as a wrapper around `sandbox-exec`. Protects sensitive files from being read or modified by wrapping any command with kernel-enforced deny rules.
 
 > [!WARNING]
-> Disclaimer: this project is mostly vibe-coded
+> This project is mostly vibe-coded
 
 ## Usage
 
 ```bash
 echo "API_KEY=secret" > .env
 
-# Pass file patterns with `-d/--deny` arg
+# Pass deny patterns with `-d/--deny`
 sbox -d ".env*" cat .env
 cat: .env: Operation not permitted
 
-# or load ignore file(s)
-# Popular AI-tools' ignore files (.aiignore, .cursorignore, etc) are auto-loaded
+# Or load additional ignore file(s)
+# Ignore files used by popular AI tools (.aiignore, .cursorignore, etc.) are auto-discovered in the project root
 sbox -f .gitignore claude
 
-# Prevent writes outside the project directory
+# Prevent writes outside the project directory and the current temp directory
 sbox --deny-write codex
 
 # Block non-loopback network access
@@ -44,7 +44,7 @@ sbox --root / -d '.env' -d '*.pem' -d '~/.ssh/' --deny-net --dry-run
 
 Ignore files usually prevent indexing or context loading. They do not stop an agent with shell access from running `cat .env` or traversing a secrets directory.
 
-`sbox` closes that gap:
+`sbox` helps close that gap by enforcing the same restrictions at execution time:
 
 - Reuse existing ignore files like `.aiignore` and `.cursorignore`
 - Apply the same restrictions to any wrapped command
@@ -66,7 +66,7 @@ Ignore files usually prevent indexing or context loading. They do not stop an ag
 
 ## Installation
 
-macOS only
+This project is macOS-only.
 
 ```bash
 ARCHIVE="sbox_Darwin_$(uname -m).tar.gz"
@@ -74,7 +74,11 @@ curl -fL "https://github.com/qweeze/sbox/releases/latest/download/${ARCHIVE}" -o
 sudo tar -xzf "/tmp/${ARCHIVE}" -C /usr/local/bin sbox
 ```
 
-### CLI absolute paths
+### Pattern Syntax
+
+Ignore files and CLI `-d/--deny` values use gitignore syntax. Malformed patterns are rejected.
+
+### Absolute CLI Paths
 
 Values passed via `-d` that begin with `/` or `~/` are treated as absolute filesystem paths and are independent of `--root`.
 
@@ -96,10 +100,6 @@ When `--no-auto-ignore` is not set, `sbox` checks the project root for these fil
 - `.cursorignore`
 - `.geminiignore`
 - `.rooignore`
-
-Ignore files use `.gitignore`-style syntax.
-
-Malformed patterns are rejected with an explicit error instead of being silently ignored. Use escaped brackets `\[` and `\]` for literal bracket characters.
 
 ## Pattern Loading Order
 

@@ -263,6 +263,38 @@ func TestSandboxReadCases(t *testing.T) {
 			},
 		},
 		{
+			name: "character class range",
+			prepare: func(t *testing.T) (sandboxFixture, []profile.Pattern, []profile.AbsPath, profile.Options, []sandboxProbe) {
+				fixture := newSandboxFixture(t)
+				mustWriteFile(t, fixture.path("a.txt"), "secret-a")
+				mustWriteFile(t, fixture.path("b.txt"), "secret-b")
+				mustWriteFile(t, fixture.path("c.txt"), "secret-c")
+				mustWriteFile(t, fixture.path("d.txt"), "public")
+
+				return fixture, sandboxPatterns("[a-c].txt"), nil, profile.Options{}, []sandboxProbe{
+					{name: "a.txt", target: "a.txt", wantReadable: false},
+					{name: "b.txt", target: "b.txt", wantReadable: false},
+					{name: "c.txt", target: "c.txt", wantReadable: false},
+					{name: "d.txt", target: "d.txt", wantReadable: true, wantOutput: "public"},
+				}
+			},
+		},
+		{
+			name: "negated character class range",
+			prepare: func(t *testing.T) (sandboxFixture, []profile.Pattern, []profile.AbsPath, profile.Options, []sandboxProbe) {
+				fixture := newSandboxFixture(t)
+				mustWriteFile(t, fixture.path("a.txt"), "public-a")
+				mustWriteFile(t, fixture.path("c.txt"), "public-c")
+				mustWriteFile(t, fixture.path("d.txt"), "secret-d")
+
+				return fixture, sandboxPatterns("[!a-c].txt"), nil, profile.Options{}, []sandboxProbe{
+					{name: "a.txt", target: "a.txt", wantReadable: true, wantOutput: "public-a"},
+					{name: "c.txt", target: "c.txt", wantReadable: true, wantOutput: "public-c"},
+					{name: "d.txt", target: "d.txt", wantReadable: false},
+				}
+			},
+		},
+		{
 			name: "directory deny",
 			prepare: func(t *testing.T) (sandboxFixture, []profile.Pattern, []profile.AbsPath, profile.Options, []sandboxProbe) {
 				fixture := newSandboxFixture(t)
