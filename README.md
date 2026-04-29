@@ -34,6 +34,14 @@ sbox --root / -d '.env' -d '*.pem' -d '~/.ssh/' --deny-net --dry-run
 (deny file* (regex "^/(|.*/)\\.env(|/.*)$"))
 (deny file* (regex "^/(|.*/)([^/]*)\\.pem(|/.*)$"))
 (deny file* (subpath "/Users/test/.ssh"))
+
+;; deny LaunchServices/AppleEvents spawn escape (e.g. `open /path/Pwn.app`)
+(deny mach-lookup (global-name-prefix "com.apple.coreservices."))
+(deny mach-lookup (global-name-prefix "com.apple.lsd."))
+(deny mach-lookup (global-name "com.apple.appleeventsd"))
+(deny appleevent-send)
+
+;; deny non-loopback network access (localhost allowed)
 (deny network*)
 (allow network-bind (local ip "localhost:*"))
 (allow network-inbound (local ip "localhost:*"))
@@ -48,7 +56,7 @@ Ignore files usually prevent indexing or context loading. They do not stop an ag
 
 - Reuse existing ignore files like `.aiignore` and `.cursorignore`
 - Apply the same restrictions to any wrapped command
-- Keep those restrictions in child processes
+- Keep those restrictions in child processes (and block the `open <app>` LaunchServices escape that would spawn a process out of the sandbox via launchd)
 - Add optional `--deny-write` and `--deny-net` protections
 
 ### Options
@@ -63,6 +71,7 @@ Ignore files usually prevent indexing or context loading. They do not stop an ag
 | `--no-auto-ignore` | Disable automatic loading of supported ignore files from the project root |
 | `--deny-write` | Deny all writes outside project root and `$TMPDIR` |
 | `--deny-net` | Deny non-loopback network access (localhost still allowed) |
+| `--allow-spawn` | Re-enable LaunchServices/AppleEvents (`open <app>`, `osascript`). Default off — the sandbox blocks these because they let a wrapped process ask launchd to spawn a sibling outside the sandbox |
 
 ## Installation
 

@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/qweeze/sbox/internal/profile"
 )
@@ -707,6 +708,85 @@ func TestSandboxDenyNet(t *testing.T) {
 		}
 		// "Connection refused" is expected — nothing is listening.
 	}
+}
+
+// TestSandboxDenySpawnBlocksOpenAppEscape exercises the LaunchServices escape:
+// `open /path/to/Pwn.app` asks launchservicesd → launchd to spawn the app, so
+// the new process inherits launchd's context and runs outside our sandbox. We
+// build a minimal .app, confirm it can exfiltrate a denied file when DenySpawn
+// is off, then confirm DenySpawn closes the gap.
+func TestSandboxDenySpawnBlocksOpenAppEscape(t *testing.T) {
+	requireMacOS(t)
+	if _, err := os.Stat("/usr/bin/open"); err != nil {
+		t.Skip("/usr/bin/open not available")
+	}
+
+	fixture := newSandboxFixture(t)
+	mustWriteFile(t, fixture.path("secret.txt"), "secret123")
+	realSecret := fixture.realPath("secret.txt")
+
+	// Attacker scratch space outside the protected project root, holding the
+	// .app bundle and the loot file the exploit writes the secret into.
+	attackerDir := t.TempDir()
+	realAttacker := resolveRealPath(attackerDir)
+	loot := filepath.Join(realAttacker, "loot.txt")
+	appDir := filepath.Join(attackerDir, "Pwn.app", "Contents", "MacOS")
+	mustMkdirAll(t, appDir)
+	mustWriteFile(t, filepath.Join(attackerDir, "Pwn.app", "Contents", "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>pwn</string>
+<key>CFBundleIdentifier</key><string>local.sbox.test.pwn</string>
+<key>CFBundleName</key><string>Pwn</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+</dict></plist>
+`)
+	pwnExe := filepath.Join(appDir, "pwn")
+	mustWriteFile(t, pwnExe, "#!/bin/sh\ncat "+realSecret+" > "+loot+" 2>&1\n")
+	if err := os.Chmod(pwnExe, 0755); err != nil {
+		t.Fatalf("chmod pwn: %v", err)
+	}
+	app := filepath.Join(realAttacker, "Pwn.app")
+
+	runExploit := func(t *testing.T, sbpl string) string {
+		t.Helper()
+		_ = os.Remove(loot)
+		_, _ = sandboxRun(t, sbpl, "/usr/bin/open", app)
+		// `open` returns immediately; the spawned app needs a beat.
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if data, err := os.ReadFile(loot); err == nil {
+				return strings.TrimSpace(string(data))
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		return ""
+	}
+
+	t.Run("baseline exploit succeeds without DenySpawn", func(t *testing.T) {
+		sbpl := mustGenerateProfile(t, []string{"secret.txt"}, nil, profile.Options{Root: fixture.realRoot})
+
+		// Sanity: direct read is denied.
+		if _, err := sandboxRun(t, sbpl, "/bin/cat", realSecret); err == nil {
+			t.Fatal("direct cat of secret.txt should be denied")
+		}
+
+		got := runExploit(t, sbpl)
+		if got != "secret123" {
+			t.Skipf("baseline exploit did not exfiltrate secret (got %q); environment may already block `open` (Gatekeeper, MDM, etc.). The DenySpawn assertion below is the load-bearing check.", got)
+		}
+	})
+
+	t.Run("DenySpawn blocks the exploit", func(t *testing.T) {
+		sbpl := mustGenerateProfile(t, []string{"secret.txt"}, nil, profile.Options{
+			Root:      fixture.realRoot,
+			DenySpawn: true,
+		})
+
+		got := runExploit(t, sbpl)
+		if got == "secret123" {
+			t.Fatalf("DenySpawn failed to block `open <app>` exfiltration: loot=%q", got)
+		}
+	})
 }
 
 func TestSandboxDenyNetAllowsLoopbackBind(t *testing.T) {

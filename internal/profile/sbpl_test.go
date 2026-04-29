@@ -707,6 +707,36 @@ func TestGenerateDenyNet(t *testing.T) {
 	}
 }
 
+func TestGenerateDenySpawn(t *testing.T) {
+	prof, err := Generate(nil, nil, Options{Root: "/Users/test/project", DenySpawn: true})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	wantRules := []string{
+		`(deny mach-lookup (global-name-prefix "com.apple.coreservices."))`,
+		`(deny mach-lookup (global-name-prefix "com.apple.lsd."))`,
+		`(deny mach-lookup (global-name "com.apple.appleeventsd"))`,
+		`(deny appleevent-send)`,
+	}
+	for _, rule := range wantRules {
+		if !strings.Contains(prof, rule) {
+			t.Errorf("missing deny-spawn rule %q in:\n%s", rule, prof)
+		}
+	}
+}
+
+func TestGenerateOmitsDenySpawnByDefault(t *testing.T) {
+	prof, err := Generate(testPatterns(".env"), nil, Options{Root: "/Users/test/project"})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	if strings.Contains(prof, "mach-lookup") || strings.Contains(prof, "appleevent-send") {
+		t.Errorf("Options{DenySpawn:false} should not emit spawn-deny rules:\n%s", prof)
+	}
+}
+
 func TestGenerateDotSlashAnchoring(t *testing.T) {
 	opts := Options{Root: "/Users/test/project"}
 	prof, err := Generate(testPatterns("./*"), nil, opts)

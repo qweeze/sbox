@@ -30,6 +30,12 @@ type Options struct {
 	DenyWrite bool
 	// DenyNet denies outbound network access. Localhost is always allowed.
 	DenyNet bool
+	// DenySpawn closes the LaunchServices/AppleEvents escape: without it,
+	// `open /path/to/Pwn.app` asks launchservicesd to spawn the app from
+	// launchd, so the new process inherits launchd's context and runs
+	// outside our sandbox. Blocking the relevant Mach services and
+	// AppleEvents forces `open` and `osascript`-style spawn paths to fail.
+	DenySpawn bool
 }
 
 // AbsPath represents an absolute filesystem path to deny (from -d /path or -d ~/path).
@@ -94,6 +100,10 @@ func Generate(patterns []Pattern, absPaths []AbsPath, opts Options) (string, err
 			action = "allow"
 		}
 		writeRule(&b, action, "file*", subpathFilter(ap.Path))
+	}
+
+	if opts.DenySpawn {
+		writeDenySpawn(&b)
 	}
 
 	if opts.DenyWrite {
@@ -220,6 +230,14 @@ func writeDenyWrite(b *strings.Builder, root string) {
 	}
 	b.WriteString("  )\n")
 	b.WriteString(")\n")
+}
+
+func writeDenySpawn(b *strings.Builder) {
+	b.WriteString("\n;; deny LaunchServices/AppleEvents spawn escape (e.g. `open /path/Pwn.app`)\n")
+	b.WriteString("(deny mach-lookup (global-name-prefix \"com.apple.coreservices.\"))\n")
+	b.WriteString("(deny mach-lookup (global-name-prefix \"com.apple.lsd.\"))\n")
+	b.WriteString("(deny mach-lookup (global-name \"com.apple.appleeventsd\"))\n")
+	b.WriteString("(deny appleevent-send)\n")
 }
 
 func writeDenyNet(b *strings.Builder) {

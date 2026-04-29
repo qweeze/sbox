@@ -122,6 +122,12 @@ Unless `--no-auto-ignore` is set, `sbox` checks the effective project root for t
 ;; --- negation (!pattern) becomes allow rules ---
 (allow file*  (regex "<pattern>"))
 
+;; --- default-on: close the LaunchServices/AppleEvents spawn escape ---
+(deny mach-lookup (global-name-prefix "com.apple.coreservices."))
+(deny mach-lookup (global-name-prefix "com.apple.lsd."))
+(deny mach-lookup (global-name "com.apple.appleeventsd"))
+(deny appleevent-send)
+
 ;; --- (optional) --deny-write: deny writes outside project root ---
 (deny file-write*  (require-all
     (require-not (subpath "<project-root>"))
@@ -165,6 +171,7 @@ sbox [options] <command> [args...]
       --no-auto-ignore    Disable automatic loading of supported ignore files from the project root
       --deny-net          Deny network access (localhost still allowed)
       --deny-write        Deny all writes outside project root and $TMPDIR
+      --allow-spawn       Re-enable LaunchServices/AppleEvents (default off; see "spawn escape" below)
 ```
 
 ### CLI pattern semantics
@@ -252,6 +259,9 @@ An agent that can't read `.env` but can write to it could overwrite it with garb
 ### Q: What does `--deny-write` do exactly?
 It denies `file-write*` (writes only, not reads) for everything **outside** the project root and the current temp directory (`os.TempDir()`, usually derived from `$TMPDIR`). This prevents an agent from modifying files in your home directory, other projects, system paths, etc. Writes to ignore-file-denied paths within the project are still blocked regardless. This is opt-in because some tools legitimately write to `~/.config`, caches, etc.
 
+### Q: Why deny LaunchServices and AppleEvents by default?
+`open /path/to/Pwn.app` does not spawn the app as a child of the wrapped process — it sends a Mach message to `launchservicesd`, which asks `launchd` to fork the app. The new process inherits launchd's context, so the sandbox does not apply to it. The same trick works through AppleEvents (`osascript -e 'tell app "Finder" to ...'`). Empirically, denying just `com.apple.coreservices.launchservicesd` is not enough — `open` falls through to other `com.apple.coreservices.*` services (e.g. `quarantine-resolver`). So the default profile denies the whole `com.apple.coreservices.` and `com.apple.lsd.` Mach prefixes plus `appleeventsd` and `appleevent-send`. CLI agents do not normally need any of these, so the cost is low; users who explicitly need them can pass `--allow-spawn`, which leaves the escape open.
+
 ### Q: What about processes that resolve paths differently?
 Some tools may use relative paths internally. `sandbox-exec` resolves all paths to absolute real paths before matching, so as long as our regex patterns account for the resolved root, this works regardless of how the tool references files.
 
@@ -262,6 +272,7 @@ Some tools may use relative paths internally. `sandbox-exec` resolves all paths 
 - Agent exfiltrating secret content via shell commands (`cat`, `grep`, etc.)
 - Agent modifying/deleting protected files
 - Child processes inheriting permissions (no escape via subprocess)
+- LaunchServices/AppleEvents spawn-via-launchd escape (`open <app>`, `osascript -e 'tell app …'`) — denied by default; use `--allow-spawn` to opt out
 
 **What sbox does NOT protect against (out of scope for MVP):**
 - Network exfiltration (agent reads a file it CAN access and sends it over the network) — mitigated by `--deny-net` flag

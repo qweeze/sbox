@@ -284,7 +284,7 @@ func TestCollectPatternInputsExpandsHomeForAbsoluteCliPaths(t *testing.T) {
 func TestBuildProfileRejectsMissingRestrictions(t *testing.T) {
 	root := t.TempDir()
 
-	_, _, err := buildProfile(root, true, nil, nil, false, false)
+	_, _, err := buildProfile(root, true, nil, nil, false, false, true)
 	if err == nil {
 		t.Fatal("expected missing restrictions to fail")
 	}
@@ -296,7 +296,7 @@ func TestBuildProfileRejectsMissingRestrictions(t *testing.T) {
 func TestBuildProfileAllowsDenyNetWithoutPatterns(t *testing.T) {
 	root := t.TempDir()
 
-	prof, _, err := buildProfile(root, true, nil, nil, false, true)
+	prof, _, err := buildProfile(root, true, nil, nil, false, true, true)
 	if err != nil {
 		t.Fatalf("buildProfile: %v", err)
 	}
@@ -317,7 +317,7 @@ func TestBuildProfileUsesAutoDiscoveredIgnoreFilesFromReadme(t *testing.T) {
 		t.Fatalf("write .cursorignore: %v", err)
 	}
 
-	prof, loadedFiles, err := buildProfile(root, true, nil, nil, false, false)
+	prof, loadedFiles, err := buildProfile(root, true, nil, nil, false, false, true)
 	if err != nil {
 		t.Fatalf("buildProfile: %v", err)
 	}
@@ -346,7 +346,7 @@ func TestBuildProfileRespectsReadmeSourcePrecedence(t *testing.T) {
 		t.Fatalf("write extra ignore: %v", err)
 	}
 
-	prof, loadedFiles, err := buildProfile(root, true, []string{extraIgnore}, []string{".env"}, false, false)
+	prof, loadedFiles, err := buildProfile(root, true, []string{extraIgnore}, []string{".env"}, false, false, true)
 	if err != nil {
 		t.Fatalf("buildProfile: %v", err)
 	}
