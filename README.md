@@ -18,8 +18,10 @@ cat: .env: Operation not permitted
 # Ignore files used by popular AI tools (.aiignore, .cursorignore, etc.) are auto-discovered in the project root
 sbox -f .gitignore claude
 
-# Prevent writes outside the project directory and the current temp directory
-sbox --deny-write codex
+# Prevent writes outside the project directory and the current temp directory.
+# codex sandboxes each shell command itself, which can't nest inside sbox's sandbox;
+# --dangerously-bypass-approvals-and-sandbox makes codex skip its own and rely on sbox's.
+sbox --deny-write --allow-write ~/.codex -- codex --dangerously-bypass-approvals-and-sandbox
 
 # Keep writes denied, but carve out an extra writable path (e.g. an agent's own config)
 sbox --deny-write --allow-write ~/.claude -- claude

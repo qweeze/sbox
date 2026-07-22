@@ -625,6 +625,23 @@ func TestSandboxDenyWrite(t *testing.T) {
 	}
 }
 
+func TestSandboxDenyWriteAllowsDevNull(t *testing.T) {
+	requireMacOS(t)
+
+	fixture := newSandboxFixture(t)
+	sbpl := mustGenerateProfile(t, nil, nil, profile.Options{
+		Root:      fixture.realRoot,
+		DenyWrite: true,
+	})
+
+	// Writing to /dev/null is outside the project root and temp dir, but the
+	// device-node exception must keep it working (shell redirections rely on it).
+	_, err := sandboxRun(t, sbpl, "/bin/bash", "-c", "echo hello > /dev/null")
+	if err != nil {
+		t.Errorf("expected write to /dev/null to succeed under deny-write: %v", err)
+	}
+}
+
 func TestSandboxDenyWriteAllowWrite(t *testing.T) {
 	requireMacOS(t)
 

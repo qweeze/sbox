@@ -228,7 +228,7 @@ func compilePattern(line string) (compiledPattern, bool, error) {
 }
 
 func writeDenyWrite(b *strings.Builder, root string, allowWrite []string) {
-	b.WriteString("\n;; deny writes outside project root and temp dirs\n")
+	b.WriteString("\n;; deny writes outside project root, temp dirs, and device nodes\n")
 	b.WriteString("(deny file-write*\n")
 	b.WriteString("  (require-all\n")
 	for _, allowed := range denyWriteExceptions(root, allowWrite) {
@@ -458,6 +458,12 @@ func denyWriteExceptions(root string, allowWrite []string) []string {
 
 	add(root)
 	add(os.TempDir())
+	// Device nodes must stay writable: shell redirections to /dev/null and
+	// interactive tools writing to their pty (/dev/ttysNNN) are ubiquitous, and
+	// blocking them breaks otherwise-innocent commands. This does not grant
+	// access to real devices — the sandbox only ever restricts further, so
+	// normal filesystem permissions (which keep raw disks root-only) still hold.
+	add("/dev")
 	for _, p := range allowWrite {
 		add(p)
 	}

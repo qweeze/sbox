@@ -641,6 +641,17 @@ func TestGenerateDenyWrite(t *testing.T) {
 	}
 }
 
+func TestGenerateDenyWriteAllowsDeviceNodes(t *testing.T) {
+	prof, err := Generate(nil, nil, Options{Root: "/Users/test/project", DenyWrite: true})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	if !strings.Contains(prof, `(require-not (subpath "/dev"))`) {
+		t.Errorf("deny-write missing /dev exception in:\n%s", prof)
+	}
+}
+
 func TestGenerateDenyWriteAllowWrite(t *testing.T) {
 	opts := Options{
 		Root:       "/Users/test/project",

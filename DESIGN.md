@@ -132,6 +132,7 @@ Unless `--no-auto-ignore` is set, `sbox` checks the effective project root for t
 (deny file-write*  (require-all
     (require-not (subpath "<project-root>"))
     (require-not (subpath "<tmpdir>"))
+    (require-not (subpath "/dev"))
 ))
 ```
 
@@ -252,13 +253,15 @@ An allow-list profile would need to enumerate every system path the wrapped tool
 Denying only `file-read-data` would still let the agent see that the file *exists* (via `stat`, `ls`, `find`). Denying `file*` makes the file fully invisible and unmodifiable — the agent doesn't even know it's there. This is more secure since an agent seeing `.env` exists might try to work around the restriction.
 
 ### Q: How does this interact with tools that have their own sandboxing?
-If Claude Code or Codex already applies `sandbox-exec`, the inner sandbox will also be active. macOS allows this — the effective policy is the intersection (most restrictive combination). So `sbox` can only make things *more* restrictive, never less. This is safe.
+macOS does **not** allow nesting: once a process is inside a `sandbox-exec` profile, applying a second one fails with `sandbox_apply: Operation not permitted`. So a tool that wraps its own subcommands in `sandbox-exec` — e.g. Codex on macOS, which sandboxes every shell command it runs — breaks under sbox. The tool itself starts fine (no nested profile yet), but the first sandboxed subprocess it spawns dies.
+
+The fix is to disable the tool's own sandbox and let sbox be the single enforcing layer. For Codex: `sbox --deny-write --allow-write ~/.codex -- codex --dangerously-bypass-approvals-and-sandbox` (that flag is documented for exactly this "externally sandboxed" case). Because a sandbox can only ever restrict access further, replacing the tool's sandbox with sbox's is safe as long as sbox's rules are at least as strict as what the tool would have applied.
 
 ### Q: What about file-write-data?
 An agent that can't read `.env` but can write to it could overwrite it with garbage. Denying both reads and writes is the safe default for ignore-file patterns.
 
 ### Q: What does `--deny-write` do exactly?
-It denies `file-write*` (writes only, not reads) for everything **outside** the project root and the current temp directory (`os.TempDir()`, usually derived from `$TMPDIR`). This prevents an agent from modifying files in your home directory, other projects, system paths, etc. Writes to ignore-file-denied paths within the project are still blocked regardless. This is opt-in because some tools legitimately write to `~/.config`, caches, etc.
+It denies `file-write*` (writes only, not reads) for everything **outside** the project root, the current temp directory (`os.TempDir()`, usually derived from `$TMPDIR`), and the device nodes under `/dev`. This prevents an agent from modifying files in your home directory, other projects, system paths, etc. `/dev` stays writable because shell redirections to `/dev/null` and interactive tools writing to their pty (`/dev/ttysNNN`) are ubiquitous; whitelisting it in the sandbox does not grant access to real devices, since normal filesystem permissions (which keep raw disks root-only) still apply. Writes to ignore-file-denied paths within the project are still blocked regardless. This is opt-in because some tools legitimately write to `~/.config`, caches, etc.
 
 ### Q: What does `--allow-write` do exactly?
 It appends additional `(require-not (subpath …))` exceptions to the `--deny-write` rule, so the named paths stay writable alongside the project root and temp dir (e.g. `--allow-write ~/.claude` for an agent that persists its own config/history). It requires `--deny-write` — using it alone is a hard error, since it would be a silent no-op. Paths accept `~/` expansion and are symlink-resolved to real paths (like absolute `-d` values); globs are not supported because SBPL `subpath` filters are literal. It **only** carves exceptions out of `--deny-write`; because the deny-write rule sits after the pattern denies and merely refrains from adding a write-deny, `--allow-write` never re-allows a path blocked by a `-d`/ignore-file deny.
