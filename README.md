@@ -21,6 +21,9 @@ sbox -f .gitignore claude
 # Prevent writes outside the project directory and the current temp directory
 sbox --deny-write codex
 
+# Keep writes denied, but carve out an extra writable path (e.g. an agent's own config)
+sbox --deny-write --allow-write ~/.claude -- claude
+
 # Block non-loopback network access
 sbox --deny-net python untrusted.py
 
@@ -70,6 +73,7 @@ Ignore files usually prevent indexing or context loading. They do not stop an ag
 | `-n`, `--dry-run` | Print profile without executing |
 | `--no-auto-ignore` | Disable automatic loading of supported ignore files from the project root |
 | `--deny-write` | Deny all writes outside project root and `$TMPDIR` |
+| `--allow-write <path>` | With `--deny-write`, keep this path writable too (can be repeated). Carves an exception out of `--deny-write` only; it does not re-allow paths blocked by a deny pattern. `~/` is expanded |
 | `--deny-net` | Deny non-loopback network access (localhost still allowed) |
 | `--allow-spawn` | Re-enable LaunchServices/AppleEvents (`open <app>`, `osascript`). Default off — the sandbox blocks these because they let a wrapped process ask launchd to spawn a sibling outside the sandbox |
 

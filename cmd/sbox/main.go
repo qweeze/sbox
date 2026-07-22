@@ -42,6 +42,7 @@ func main() {
 		verbose      bool
 		dryRun       bool
 		denyWrite    bool
+		allowWrite   []string
 		denyNet      bool
 		allowSpawn   bool
 		noAutoIgnore bool
@@ -53,6 +54,7 @@ func main() {
 	flag.BoolVarP(&verbose, "verbose", "v", false, "Print loaded ignore files and generated sandbox profile details to stderr")
 	flag.BoolVarP(&dryRun, "dry-run", "n", false, "Print profile without executing")
 	flag.BoolVar(&denyWrite, "deny-write", false, "Deny all writes outside project root and temp dirs")
+	flag.StringArrayVar(&allowWrite, "allow-write", nil, "Permit writes to this path when --deny-write is set (can be repeated)")
 	flag.BoolVar(&denyNet, "deny-net", false, "Deny network access (localhost still allowed)")
 	flag.BoolVar(&allowSpawn, "allow-spawn", false, "Permit LaunchServices/AppleEvents (re-enables 'open <app>' and 'osascript'; opens a known sandbox-escape path)")
 	flag.BoolVar(&noAutoIgnore, "no-auto-ignore", false, "Disable automatic loading of supported ignore files from the project root")
@@ -71,7 +73,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	sbpl, loadedFiles, err := buildProfile(root, !noAutoIgnore, extraFiles, denyPatterns, denyWrite, denyNet, !allowSpawn)
+	if len(allowWrite) > 0 && !denyWrite {
+		fatal("--allow-write requires --deny-write")
+	}
+
+	sbpl, loadedFiles, err := buildProfile(root, !noAutoIgnore, extraFiles, denyPatterns, denyWrite, allowWrite, denyNet, !allowSpawn)
 	if err != nil {
 		fatal("%v", err)
 	}
@@ -111,7 +117,7 @@ func main() {
 	}
 }
 
-func buildProfile(root string, autoIgnore bool, extraFiles []string, denyPatterns []string, denyWrite bool, denyNet bool, denySpawn bool) (string, []string, error) {
+func buildProfile(root string, autoIgnore bool, extraFiles []string, denyPatterns []string, denyWrite bool, allowWrite []string, denyNet bool, denySpawn bool) (string, []string, error) {
 	projectRoot, err := resolveRoot(root)
 	if err != nil {
 		return "", nil, fmt.Errorf("resolve root: %w", err)
@@ -131,11 +137,17 @@ func buildProfile(root string, autoIgnore bool, extraFiles []string, denyPattern
 		return "", nil, fmt.Errorf("resolve symlinks for root: %w", err)
 	}
 
+	allowWritePaths := make([]string, 0, len(allowWrite))
+	for _, p := range allowWrite {
+		allowWritePaths = append(allowWritePaths, resolveAbsoluteDenyPath(expandHome(p)))
+	}
+
 	sbpl, err := profile.Generate(inputs.Patterns, inputs.AbsPaths, profile.Options{
-		Root:      realRoot,
-		DenyWrite: denyWrite,
-		DenyNet:   denyNet,
-		DenySpawn: denySpawn,
+		Root:       realRoot,
+		DenyWrite:  denyWrite,
+		AllowWrite: allowWritePaths,
+		DenyNet:    denyNet,
+		DenySpawn:  denySpawn,
 	})
 	if err != nil {
 		return "", nil, fmt.Errorf("generate profile: %w", err)

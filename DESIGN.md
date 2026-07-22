@@ -171,6 +171,7 @@ sbox [options] <command> [args...]
       --no-auto-ignore    Disable automatic loading of supported ignore files from the project root
       --deny-net          Deny network access (localhost still allowed)
       --deny-write        Deny all writes outside project root and $TMPDIR
+      --allow-write <path> Keep <path> writable under --deny-write (repeatable; requires --deny-write)
       --allow-spawn       Re-enable LaunchServices/AppleEvents (default off; see "spawn escape" below)
 ```
 
@@ -259,6 +260,9 @@ An agent that can't read `.env` but can write to it could overwrite it with garb
 ### Q: What does `--deny-write` do exactly?
 It denies `file-write*` (writes only, not reads) for everything **outside** the project root and the current temp directory (`os.TempDir()`, usually derived from `$TMPDIR`). This prevents an agent from modifying files in your home directory, other projects, system paths, etc. Writes to ignore-file-denied paths within the project are still blocked regardless. This is opt-in because some tools legitimately write to `~/.config`, caches, etc.
 
+### Q: What does `--allow-write` do exactly?
+It appends additional `(require-not (subpath …))` exceptions to the `--deny-write` rule, so the named paths stay writable alongside the project root and temp dir (e.g. `--allow-write ~/.claude` for an agent that persists its own config/history). It requires `--deny-write` — using it alone is a hard error, since it would be a silent no-op. Paths accept `~/` expansion and are symlink-resolved to real paths (like absolute `-d` values); globs are not supported because SBPL `subpath` filters are literal. It **only** carves exceptions out of `--deny-write`; because the deny-write rule sits after the pattern denies and merely refrains from adding a write-deny, `--allow-write` never re-allows a path blocked by a `-d`/ignore-file deny.
+
 ### Q: Why deny LaunchServices and AppleEvents by default?
 `open /path/to/Pwn.app` does not spawn the app as a child of the wrapped process — it sends a Mach message to `launchservicesd`, which asks `launchd` to fork the app. The new process inherits launchd's context, so the sandbox does not apply to it. The same trick works through AppleEvents (`osascript -e 'tell app "Finder" to ...'`). Empirically, denying just `com.apple.coreservices.launchservicesd` is not enough — `open` falls through to other `com.apple.coreservices.*` services (e.g. `quarantine-resolver`). So the default profile denies the whole `com.apple.coreservices.` and `com.apple.lsd.` Mach prefixes plus `appleeventsd` and `appleevent-send`. CLI agents do not normally need any of these, so the cost is low; users who explicitly need them can pass `--allow-spawn`, which leaves the escape open.
 
@@ -293,4 +297,3 @@ Some tools may use relative paths internally. `sandbox-exec` resolves all paths 
 - **Nested ignore files**: Support supported ignore files in subdirectories (scoped rules)
 - **Presets**: Curated ignore files for common sensitive paths (`~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.config/gh`) — users can reference them via `-f`
 - **Shell integration**: `sbox shell` to drop into a sandboxed shell with prompt indicator
-- **`--allow-write <path>`**: Whitelist additional writable paths when using `--deny-write`

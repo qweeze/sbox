@@ -641,6 +641,41 @@ func TestGenerateDenyWrite(t *testing.T) {
 	}
 }
 
+func TestGenerateDenyWriteAllowWrite(t *testing.T) {
+	opts := Options{
+		Root:       "/Users/test/project",
+		DenyWrite:  true,
+		AllowWrite: []string{"/Users/test/.claude", "/Users/test/.cache"},
+	}
+	prof, err := Generate(nil, nil, opts)
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	for _, path := range []string{"/Users/test/.claude", "/Users/test/.cache"} {
+		if !strings.Contains(prof, `(require-not (subpath "`+path+`"))`) {
+			t.Errorf("deny-write missing allow-write exception for %q in:\n%s", path, prof)
+		}
+	}
+}
+
+func TestGenerateDenyWriteAllowWriteDedupesRoot(t *testing.T) {
+	root := "/Users/test/project"
+	opts := Options{
+		Root:       root,
+		DenyWrite:  true,
+		AllowWrite: []string{root},
+	}
+	prof, err := Generate(nil, nil, opts)
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	if got := strings.Count(prof, `(require-not (subpath "`+root+`"))`); got != 1 {
+		t.Errorf("expected project root exception exactly once, got %d:\n%s", got, prof)
+	}
+}
+
 func TestGenerateDenyWriteAllowsCurrentTempDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("TMPDIR", tmpDir)

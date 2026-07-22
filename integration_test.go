@@ -625,6 +625,52 @@ func TestSandboxDenyWrite(t *testing.T) {
 	}
 }
 
+func TestSandboxDenyWriteAllowWrite(t *testing.T) {
+	requireMacOS(t)
+
+	fixture := newSandboxFixture(t)
+
+	// A directory under /tmp is outside the typical macOS $TMPDIR
+	// (under /var/folders), so without an allow-write exception it would be
+	// denied by --deny-write.
+	allowDir, err := os.MkdirTemp("/tmp", "sbox-allow-write-")
+	if err != nil {
+		t.Skipf("create allow-write dir: %v", err)
+	}
+	defer os.RemoveAll(allowDir)
+
+	realAllow := resolveRealPath(allowDir)
+	realCurrentTemp := resolveRealPath(os.TempDir())
+	if strings.HasPrefix(strings.TrimRight(realAllow, "/")+"/", strings.TrimRight(realCurrentTemp, "/")+"/") {
+		t.Skip("current temp dir resolves under /tmp; cannot distinguish another temp root here")
+	}
+
+	sbpl := mustGenerateProfile(t, nil, nil, profile.Options{
+		Root:       fixture.realRoot,
+		DenyWrite:  true,
+		AllowWrite: []string{realAllow},
+	})
+
+	allowedFile := filepath.Join(realAllow, "ok.txt")
+	_, err = sandboxRun(t, sbpl, "/bin/bash", "-c", "echo hello > "+allowedFile)
+	if err != nil {
+		t.Errorf("expected write to allow-write path to succeed: %v", err)
+	}
+
+	// A sibling directory not covered by allow-write is still denied.
+	otherDir, err := os.MkdirTemp("/tmp", "sbox-allow-write-other-")
+	if err != nil {
+		t.Skipf("create other temp dir: %v", err)
+	}
+	defer os.RemoveAll(otherDir)
+
+	otherFile := filepath.Join(resolveRealPath(otherDir), "evil.txt")
+	_, err = sandboxRun(t, sbpl, "/bin/bash", "-c", "echo evil > "+otherFile)
+	if err == nil {
+		t.Error("expected write outside allow-write path to be denied")
+	}
+}
+
 func TestSandboxDenyWriteBlocksOtherTempRoots(t *testing.T) {
 	requireMacOS(t)
 

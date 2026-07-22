@@ -28,6 +28,12 @@ type Options struct {
 	Root string
 	// DenyWrite denies writes outside the project root and temp dirs.
 	DenyWrite bool
+	// AllowWrite lists additional absolute paths that stay writable when
+	// DenyWrite is set (in addition to the project root and temp dirs). Each
+	// is emitted as a require-not subpath exception in the deny-write rule.
+	// It only carves exceptions out of DenyWrite; it does not re-allow paths
+	// blocked by an explicit deny pattern.
+	AllowWrite []string
 	// DenyNet denies outbound network access. Localhost is always allowed.
 	DenyNet bool
 	// DenySpawn closes the LaunchServices/AppleEvents escape: without it,
@@ -107,7 +113,7 @@ func Generate(patterns []Pattern, absPaths []AbsPath, opts Options) (string, err
 	}
 
 	if opts.DenyWrite {
-		writeDenyWrite(&b, opts.Root)
+		writeDenyWrite(&b, opts.Root, opts.AllowWrite)
 	}
 
 	if opts.DenyNet {
@@ -221,11 +227,11 @@ func compilePattern(line string) (compiledPattern, bool, error) {
 	return compiled, true, nil
 }
 
-func writeDenyWrite(b *strings.Builder, root string) {
+func writeDenyWrite(b *strings.Builder, root string, allowWrite []string) {
 	b.WriteString("\n;; deny writes outside project root and temp dirs\n")
 	b.WriteString("(deny file-write*\n")
 	b.WriteString("  (require-all\n")
-	for _, allowed := range denyWriteExceptions(root) {
+	for _, allowed := range denyWriteExceptions(root, allowWrite) {
 		fmt.Fprintf(b, "    (require-not %s)\n", subpathFilter(allowed))
 	}
 	b.WriteString("  )\n")
@@ -434,7 +440,7 @@ func buildExpression(line string, anchored bool, suffix string) string {
 	return "^(|.*/)" + expr
 }
 
-func denyWriteExceptions(root string) []string {
+func denyWriteExceptions(root string, allowWrite []string) []string {
 	seen := make(map[string]struct{})
 	var paths []string
 
@@ -452,6 +458,9 @@ func denyWriteExceptions(root string) []string {
 
 	add(root)
 	add(os.TempDir())
+	for _, p := range allowWrite {
+		add(p)
+	}
 
 	return paths
 }

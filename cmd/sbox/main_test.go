@@ -284,7 +284,7 @@ func TestCollectPatternInputsExpandsHomeForAbsoluteCliPaths(t *testing.T) {
 func TestBuildProfileRejectsMissingRestrictions(t *testing.T) {
 	root := t.TempDir()
 
-	_, _, err := buildProfile(root, true, nil, nil, false, false, true)
+	_, _, err := buildProfile(root, true, nil, nil, false, nil, false, true)
 	if err == nil {
 		t.Fatal("expected missing restrictions to fail")
 	}
@@ -296,7 +296,7 @@ func TestBuildProfileRejectsMissingRestrictions(t *testing.T) {
 func TestBuildProfileAllowsDenyNetWithoutPatterns(t *testing.T) {
 	root := t.TempDir()
 
-	prof, _, err := buildProfile(root, true, nil, nil, false, true, true)
+	prof, _, err := buildProfile(root, true, nil, nil, false, nil, true, true)
 	if err != nil {
 		t.Fatalf("buildProfile: %v", err)
 	}
@@ -309,6 +309,25 @@ func TestBuildProfileAllowsDenyNetWithoutPatterns(t *testing.T) {
 	}
 }
 
+func TestBuildProfileAllowWriteExpandsHome(t *testing.T) {
+	root := t.TempDir()
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("resolve home dir: %v", err)
+	}
+	want := resolveAbsoluteDenyPath(filepath.Join(home, ".claude"))
+
+	prof, _, err := buildProfile(root, true, nil, nil, true, []string{"~/.claude"}, false, true)
+	if err != nil {
+		t.Fatalf("buildProfile: %v", err)
+	}
+
+	if !strings.Contains(prof, `(require-not (subpath "`+want+`"))`) {
+		t.Fatalf("expected deny-write to except expanded ~/.claude (%q):\n%s", want, prof)
+	}
+}
+
 func TestBuildProfileUsesAutoDiscoveredIgnoreFilesFromReadme(t *testing.T) {
 	root := t.TempDir()
 
@@ -317,7 +336,7 @@ func TestBuildProfileUsesAutoDiscoveredIgnoreFilesFromReadme(t *testing.T) {
 		t.Fatalf("write .cursorignore: %v", err)
 	}
 
-	prof, loadedFiles, err := buildProfile(root, true, nil, nil, false, false, true)
+	prof, loadedFiles, err := buildProfile(root, true, nil, nil, false, nil, false, true)
 	if err != nil {
 		t.Fatalf("buildProfile: %v", err)
 	}
@@ -346,7 +365,7 @@ func TestBuildProfileRespectsReadmeSourcePrecedence(t *testing.T) {
 		t.Fatalf("write extra ignore: %v", err)
 	}
 
-	prof, loadedFiles, err := buildProfile(root, true, []string{extraIgnore}, []string{".env"}, false, false, true)
+	prof, loadedFiles, err := buildProfile(root, true, []string{extraIgnore}, []string{".env"}, false, nil, false, true)
 	if err != nil {
 		t.Fatalf("buildProfile: %v", err)
 	}
